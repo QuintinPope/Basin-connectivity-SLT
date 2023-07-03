@@ -75,21 +75,27 @@ def train_new_model(model,
             batch_labels = train_labels[batch_start: batch_end]
             outputs = model(batch_data, labels = batch_labels)
             classification_loss = outputs.loss
-
-            basin_exploration_loss = 0
+            loss = classification_loss
+            
+            if optimizer_order == 1:
+                loss.backward()
+            elif optimizer_order == 2:
+                loss.backward(create_graph = True)
+            
             for prior_model in existing_models:
                 prior_model_weight = torch.rand(1).item()
                 linear_interpolation_sample_model = linear_model_mix(model, prior_model, prior_model_weight, output_model, device)
                 prior_model_outputs = linear_interpolation_sample_model(batch_data, labels = batch_labels)
                 interpolation_model_classification_loss = min(prior_model_outputs.loss, max_interpolation_model_loss)
-                basin_exploration_loss += interpolation_model_classification_loss
-            basin_exploration_loss /= max(1, len(existing_models))
 
-            loss = classification_loss - basin_exploration_loss_weight * basin_exploration_loss
-            if optimizer_order == 1:
-                loss.backward()
-            elif optimizer_order == 2:
-                loss.backward(create_graph = True)
+                interpolation_model_classification_loss.backward(retain_graph = True)
+                grads = list()
+                for param in linear_interpolation_sample_model.parameters():
+                    grads.append(param.grad.clone())
+
+                for param, grad in zip(model.parameters(), grads):
+                    param.grad += - basin_exploration_loss_weight * grad / len(existing_models)
+
             optimizer.step()
             schedule.step()
             optimizer.zero_grad()
