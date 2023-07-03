@@ -86,7 +86,9 @@ def train_new_model(model,
                 prior_model_weight = torch.rand(1).item()
                 linear_interpolation_sample_model = linear_model_mix(model, prior_model, prior_model_weight, output_model, device)
                 prior_model_outputs = linear_interpolation_sample_model(batch_data, labels = batch_labels)
-                interpolation_model_classification_loss = min(prior_model_outputs.loss, max_interpolation_model_loss)
+
+                if interpolation_model_classification_loss > max_interpolation_model_loss:
+                    interpolation_model_classification_loss = interpolation_model_classification_loss * 0 # should be the same as just setting it equal to a constant, in terms of gradients
 
                 interpolation_model_classification_loss.backward(retain_graph = True)
                 grads = list()
