@@ -83,7 +83,8 @@ if str.lower(args.dataset) == "mnli":
                                                                             device = args.device, 
                                                                             save_data = True)
 
-existing_models = [torch.load("../" + args.existing_models_path + "/" + old_model_name) for old_model_name in os.listdir("../" + args.existing_models_path)]
+old_model_names = [name for name in os.listdir("../" + args.existing_models_path) if name[0] != '.']
+existing_models = [torch.load("../" + args.existing_models_path + "/" + old_model_name) for old_model_name in old_model_names]
 
 
 model, best_model, best_model_test_loss, train_losses, train_accuracies, test_losses, test_accuracies = train_new_model(model,
