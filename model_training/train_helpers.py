@@ -96,7 +96,7 @@ def train_new_model(model,
                     grads.append(param.grad.clone())
 
                 for param, grad in zip(model.parameters(), grads):
-                    param.grad += - basin_exploration_loss_weight * grad / len(existing_models)
+                    param.grad += - basin_exploration_loss_weight * grad * 4*(prior_model_weight)*(1-prior_model_weight) / len(existing_models) # Strange prior model weight polynomial made to not punish model for being good.
 
             optimizer.step()
             schedule.step()
