@@ -20,7 +20,16 @@ parser.add_argument('--dataset', type=str, default='mnli',
                     help='Huggingface dataset name to train the model on. Can also be a path to a saved dataset.')
 
 parser.add_argument('--load_saved_data', type=str, default='true',
-                    help='Do we try to load a saved dataset first, or re-download the data?')
+                    help='Do we try to load a saved dataset, or re-download the data?')
+
+parser.add_argument('--longest_sequence_allowed', type=int, default=64,
+                    help='Ignore datapoints with more than this many tokens.')
+
+parser.add_argument('--test_set_size', type=int, default=10000,
+                    help='Number of datapoints to include in the test set.')
+
+parser.add_argument('--make_binary', type=str, default='true',
+                    help='Do we convert the datasets to a binary prediction problem? Any value but "true" means we do not.')
 
 parser.add_argument('--existing_models_path', type=str, default='existing_models',
                     help='Directory with existing models to regularize away from.')
@@ -66,19 +75,29 @@ args = parser.parse_args()
 
 
 model = AutoModelForSequenceClassification.from_pretrained(args.model_name).to(args.device)
+dataset_label = str.lower(args.dataset)
+data_path = "data/" + dataset_label
+make_binary = str.lower(args.make_binary) == "true"
 
-if str.lower(args.dataset) == "mnli":
-    data_path = "data/mnli"
+if dataset_label == "mnli":
     if str(args.load_saved_data) == "true":
-        train_data = torch.load("../" + data_path + "/mnli_training_data.pth")
-        train_labels = torch.load("../" + data_path + "/mnli_training_labels.pth")
-        test_data = torch.load("../" + data_path + "/mnli_testing_data.pth")
-        test_labels = torch.load("../" + data_path + "/mnli_testing_labels.pth")
+        train_data, train_labels, test_data, test_labels = load_data_from_file(data_path, "mnli")
     else:
-        train_data, train_labels, test_data, test_labels = get_mnli_dataset(model_name = "bert-base-uncased", 
-                                                                            longest_sequence_allowed = 64, 
-                                                                            n_test_data = 10000, 
-                                                                            make_binary = True, 
+        train_data, train_labels, test_data, test_labels = get_mnli_dataset(model_name = args.model_name, 
+                                                                            longest_sequence_allowed = args.longest_sequence_allowed, 
+                                                                            n_test_data = args.test_set_size, 
+                                                                            make_binary = make_binary, 
+                                                                            data_path = data_path, 
+                                                                            device = args.device, 
+                                                                            save_data = True)
+elif dataset_label == "anli":
+    if str(args.load_saved_data) == "true":
+        train_data, train_labels, test_data, test_labels = load_data_from_file(data_path, "anli")
+    else:
+        train_data, train_labels, test_data, test_labels = get_anli_dataset(model_name = args.model_name, 
+                                                                            longest_sequence_allowed = args.longest_sequence_allowed, 
+                                                                            n_test_data = args.test_set_size, 
+                                                                            make_binary = make_binary, 
                                                                             data_path = data_path, 
                                                                             device = args.device, 
                                                                             save_data = True)
@@ -86,13 +105,15 @@ if str.lower(args.dataset) == "mnli":
 old_model_names = [name for name in os.listdir("../" + args.existing_models_path) if name[0] != '.']
 existing_models = [torch.load("../" + args.existing_models_path + "/" + old_model_name) for old_model_name in old_model_names]
 
-
+print("Currently regularizing against", len(existing_models), "existing models.")
+if len(existing_models) > 0:
+    print("Existing models:", str(old_model_names))
 model, best_model, best_model_test_loss, train_losses, train_accuracies, test_losses, test_accuracies = train_new_model(model,
                                                                                      train_data,
                                                                                      train_labels,
                                                                                      test_data,
                                                                                      test_labels,
-                                                                                     existing_models = [],
+                                                                                     existing_models = existing_models,
                                                                                      optimizer = args.optimizer,
                                                                                      lr = args.lr,
                                                                                      weight_decay = args.weight_decay,
