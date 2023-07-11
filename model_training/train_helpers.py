@@ -2,28 +2,8 @@ import torch
 import transformers
 from transformers import AutoModel, AutoModelForSequenceClassification
 import copy
-
-def eval_model(model, data, labels, batch_size = 128):
-    n_data = len(data)
-    steps = n_data // batch_size + (n_data % batch_size > 0)
-    total_loss = 0
-    total_n_correct = 0
-    with torch.no_grad():
-        for step in range(steps):
-            batch_start = step * batch_size
-            batch_end = min((step + 1) * batch_size, n_data)
-            batch_data = data[batch_start: batch_end]
-            batch_labels = labels[batch_start: batch_end]
-            outputs = model(batch_data, labels = batch_labels)
-            loss = outputs.loss
-            logits = outputs.logits
-
-            predictions = torch.argmax(logits, dim=1)
-            n_correct = torch.sum(predictions == batch_labels).item()
-            total_loss += loss.item() * len(batch_labels)
-            total_n_correct += n_correct
-    return total_loss / n_data, total_n_correct / n_data
-
+from connectivity_helpers import *
+import tqdm
 
 def train_new_model(model,
                     train_data,
@@ -41,7 +21,8 @@ def train_new_model(model,
                     max_interpolation_model_loss = 1,
                     basin_exploration_loss_weight = 1,
                     device = "cuda:0",
-                    test_each_update_step = False):
+                    test_each_update_step = False,
+                    standard_deviation = 0.2):
     all_train_losses = []
     all_test_losses = []
     all_train_accuracies = []
@@ -67,28 +48,33 @@ def train_new_model(model,
 
     for epoch in range(epochs):
         epoch_total_train_loss = 0
+        epoch_total_basin_reg_loss = 0
         epoch_train_n_correct = 0
-        for step in range(steps_per_epoch):
+        epoch_train_n_basin_correct = 0
+        for step in tqdm.tqdm(range(steps_per_epoch)):
             batch_start = step * batch_size
             batch_end = min((step + 1) * batch_size, n_train_data)
             batch_data = train_data[batch_start: batch_end]
             batch_labels = train_labels[batch_start: batch_end]
             outputs = model(batch_data, labels = batch_labels)
             classification_loss = outputs.loss
-            loss = classification_loss
             
             if optimizer_order == 1:
-                loss.backward()
+                classification_loss.backward()
             elif optimizer_order == 2:
-                loss.backward(create_graph = True)
+                classification_loss.backward(create_graph = True)
             
             for prior_model in existing_models:
-                prior_model_weight = torch.rand(1).item()
+                prior_model_weight = (torch.randn(1).item() * standard_deviation) + 0.5
+                if prior_model_weight < 0 or prior_model_weight > 1:
+                    prior_model_weight = 0.5
                 linear_interpolation_sample_model = linear_model_mix(model, prior_model, prior_model_weight, output_model, device)
                 prior_model_outputs = linear_interpolation_sample_model(batch_data, labels = batch_labels)
+                interpolation_model_classification_loss = prior_model_outputs.loss
 
                 if interpolation_model_classification_loss > max_interpolation_model_loss:
                     interpolation_model_classification_loss = interpolation_model_classification_loss * 0 # should be the same as just setting it equal to a constant, in terms of gradients
+                    print("Max interpolation regularizer loss encountered.")
 
                 interpolation_model_classification_loss.backward(retain_graph = True)
                 grads = list()
@@ -97,6 +83,11 @@ def train_new_model(model,
 
                 for param, grad in zip(model.parameters(), grads):
                     param.grad += - basin_exploration_loss_weight * grad * 4*(prior_model_weight)*(1-prior_model_weight) / len(existing_models) # Strange prior model weight polynomial made to not punish model for being good.
+                
+                basin_predictions = torch.argmax(prior_model_outputs.logits, dim=1)
+                basin_n_correct = torch.sum(basin_predictions == batch_labels).item()
+                epoch_train_n_basin_correct += basin_n_correct
+                epoch_total_basin_reg_loss += interpolation_model_classification_loss.item() * len(batch_labels)
 
             optimizer.step()
             schedule.step()
@@ -119,14 +110,18 @@ def train_new_model(model,
             #        print("New test accuracy:", round(step_test_accuracy, 5))
         train_loss = epoch_total_train_loss / n_train_data
         train_accuracy = epoch_train_n_correct / n_train_data
+        basin_reg_loss = epoch_total_basin_reg_loss / n_train_data
+        basin_reg_accuracy = epoch_train_n_basin_correct / n_train_data
 
         test_loss, test_accuracy = eval_model(model, test_data, test_labels, batch_size = batch_size)
         print("###########################")
         print("Epoch", epoch, ":")
-        print("Train loss.   :", round(train_loss, 5))
-        print("Train accuracy:", round(train_accuracy, 5))
-        print("Test loss.    :", round(test_loss, 5))
-        print("Test accuracy :", round(test_accuracy, 5))
+        print("Train loss.    :", round(train_loss, 5))
+        print("Train accuracy :", round(train_accuracy, 5))
+        print("Test loss.     :", round(test_loss, 5))
+        print("Test accuracy  :", round(test_accuracy, 5))
+        print("Basin reg loss.:", round(basin_reg_loss, 5))
+        print("Basin reg acc. :", round(basin_reg_accuracy, 5))
 
         all_train_losses.append(train_loss)
         all_test_losses.append(test_loss)
