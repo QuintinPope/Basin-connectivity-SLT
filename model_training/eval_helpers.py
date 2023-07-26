@@ -2,7 +2,7 @@ import torch
 import transformers
 
 def eval_model(model, data, labels, batch_size = 128):
-    model.eval()
+    model = model.eval()
     n_data = len(data)
     steps = n_data // batch_size + (n_data % batch_size > 0)
     total_loss = 0
@@ -21,5 +21,5 @@ def eval_model(model, data, labels, batch_size = 128):
             n_correct = torch.sum(predictions == batch_labels).item()
             total_loss += loss.item() * len(batch_labels)
             total_n_correct += n_correct
-    model.train()
+    model = model.train()
     return total_loss / n_data, total_n_correct / n_data

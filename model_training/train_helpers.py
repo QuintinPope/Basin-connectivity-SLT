@@ -3,6 +3,7 @@ import transformers
 from transformers import AutoModel, AutoModelForSequenceClassification
 import copy
 from connectivity_helpers import *
+from eval_helpers import *
 import tqdm
 
 def train_new_model(model,
@@ -47,18 +48,21 @@ def train_new_model(model,
     output_model = AutoModelForSequenceClassification.from_config(model.config).to(device)
 
     for epoch in range(epochs):
+        n_basin_reg_loss_overflows = 0
         epoch_total_train_loss = 0
         epoch_total_basin_reg_loss = 0
         epoch_train_n_correct = 0
         epoch_train_n_basin_correct = 0
-        for step in tqdm.tqdm(range(steps_per_epoch)):
+        pbar = tqdm.tqdm(range(steps_per_epoch))
+        for step in pbar:
             batch_start = step * batch_size
             batch_end = min((step + 1) * batch_size, n_train_data)
             batch_data = train_data[batch_start: batch_end]
             batch_labels = train_labels[batch_start: batch_end]
             outputs = model(batch_data, labels = batch_labels)
             classification_loss = outputs.loss
-            
+            interpolation_model_classification_loss = 0
+
             if optimizer_order == 1:
                 classification_loss.backward()
             elif optimizer_order == 2:
@@ -73,8 +77,9 @@ def train_new_model(model,
                 interpolation_model_classification_loss = prior_model_outputs.loss
 
                 if interpolation_model_classification_loss > max_interpolation_model_loss:
-                    interpolation_model_classification_loss = interpolation_model_classification_loss * 0 # should be the same as just setting it equal to a constant, in terms of gradients
-                    print("Max interpolation regularizer loss encountered.")
+                    interpolation_model_classification_loss = interpolation_model_classification_loss * 0 + 1 # should be the same as just setting it equal to a constant, in terms of gradients
+                    n_basin_reg_loss_overflows += 1
+                    #print("Max interpolation regularizer loss encountered.")
 
                 interpolation_model_classification_loss.backward(retain_graph = True)
                 grads = list()
@@ -99,6 +104,7 @@ def train_new_model(model,
             #return n_correct, logits, predictions, batch_labels
             epoch_total_train_loss += classification_loss.item() * len(batch_labels)
             epoch_train_n_correct += n_correct
+            pbar.set_description("CLS Loss: " + str(round(classification_loss.item(), 5)) + " -- Reg Loss: " + str(round(interpolation_model_classification_loss.item(), 5))) 
 
             #if test_each_update_step:
             #    step_test_loss, step_test_accuracy = eval_model(model, test_data, test_labels, batch_size = batch_size)
@@ -116,12 +122,13 @@ def train_new_model(model,
         test_loss, test_accuracy = eval_model(model, test_data, test_labels, batch_size = batch_size)
         print("###########################")
         print("Epoch", epoch, ":")
-        print("Train loss.    :", round(train_loss, 5))
-        print("Train accuracy :", round(train_accuracy, 5))
-        print("Test loss.     :", round(test_loss, 5))
-        print("Test accuracy  :", round(test_accuracy, 5))
-        print("Basin reg loss.:", round(basin_reg_loss, 5))
-        print("Basin reg acc. :", round(basin_reg_accuracy, 5))
+        print("Train loss.       :", round(train_loss, 5))
+        print("Train accuracy    :", round(train_accuracy, 5))
+        print("Test loss.        :", round(test_loss, 5))
+        print("Test accuracy     :", round(test_accuracy, 5))
+        print("Basin reg loss.   :", round(basin_reg_loss, 5))
+        print("Basin reg acc.    :", round(basin_reg_accuracy, 5))
+        print("Reg loss overflows:", n_basin_reg_loss_overflows)
 
         all_train_losses.append(train_loss)
         all_test_losses.append(test_loss)

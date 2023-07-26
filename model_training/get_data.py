@@ -15,8 +15,8 @@ def get_mnli_dataset(model_name = "bert-base-uncased",
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     mnli_dataset = load_dataset("multi_nli")
     mnli_pandas = mnli_dataset['train'].to_pandas()[["premise", "hypothesis", "label"]]
-    mnli_pandas = mnli_pandas.append(mnli_dataset['validation_matched'].to_pandas()[["premise", "hypothesis", "label"]])
-    mnli_pandas = mnli_pandas.append(mnli_dataset['validation_mismatched'].to_pandas()[["premise", "hypothesis", "label"]])
+    mnli_pandas = pd.concat((mnli_pandas, mnli_dataset['validation_matched'].to_pandas()[["premise", "hypothesis", "label"]]), ignore_index=True)
+    mnli_pandas = pd.concat((mnli_pandas, mnli_dataset['validation_mismatched'].to_pandas()[["premise", "hypothesis", "label"]]), ignore_index=True)
     mnli_pandas = mnli_pandas.sample(frac = 1, random_state=42)
 
     train_data, train_labels, test_data, test_labels = filter_data(mnli_pandas, 
@@ -45,8 +45,8 @@ def get_anli_dataset(model_name = "bert-base-uncased",
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     anli_dataset = load_dataset("anli")
     anli_pandas = anli_dataset['train_r3'].to_pandas()[["premise", "hypothesis", "label"]]
-    anli_pandas = anli_pandas.append(anli_dataset['test_r3'].to_pandas()[["premise", "hypothesis", "label"]])
-    anli_pandas = anli_pandas.append(anli_dataset['dev_r3'].to_pandas()[["premise", "hypothesis", "label"]])
+    anli_pandas = pd.concat((anli_pandas, anli_dataset['test_r3'].to_pandas()[["premise", "hypothesis", "label"]]), ignore_index=True)
+    anli_pandas = pd.concat((anli_pandas, anli_dataset['dev_r3'].to_pandas()[["premise", "hypothesis", "label"]]), ignore_index=True)
     anli_pandas = anli_pandas.sample(frac = 1, random_state=42)
 
     train_data, train_labels, test_data, test_labels = filter_data(anli_pandas, 

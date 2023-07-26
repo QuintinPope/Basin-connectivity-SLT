@@ -42,7 +42,7 @@ parser.add_argument('--batch_size', type=int, default=32,
                     help='Batch size during training.')
 
 parser.add_argument('--n_interpolation_points', type=int, default=20,
-                    help='Number of points to check on the linear path between the models.')
+                    help='Number of points to check on the linear path between the models. Total model evaluations are 2 higher than this number due to evaluating endpoints.')
 
 parser.add_argument('--device', type=str, default="cuda:0",
                     help='GPU / CPU device on which experiments will run.')
@@ -97,10 +97,10 @@ if str.lower(args.use_test_data) != "true":
 model_1 = torch.load(args.model_1_path)
 model_2 = torch.load(args.model_2_path)
 
-path_losses = check_barrier_heights(model_1, model_2, test_data, test_labels, batch_size = args.batch_size, n_check_points = args.n_interpolation_points, device = args.device)
+path_losses = check_barrier_heights(model_1, model_2, test_data, test_labels, batch_size = args.batch_size, n_check_points_between = args.n_interpolation_points, device = args.device)
 
 if str.lower(args.show_plot) == "true" or str.lower(args.save_plot_loc) != "none":
-    plt.plot(range(args.n_interpolation_points), path_losses)
+    plt.plot(range(args.n_interpolation_points + 2), path_losses)
     plt.xlabel("Interpolation point number")
     plt.ylabel(("Train" if str.lower(args.use_test_data) != "true" else "Test") + " Loss")
     if str.lower(args.show_plot) == "true":
