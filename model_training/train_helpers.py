@@ -61,7 +61,7 @@ def train_new_model(model,
             batch_labels = train_labels[batch_start: batch_end]
             outputs = model(batch_data, labels = batch_labels)
             classification_loss = outputs.loss
-            interpolation_model_classification_loss = 0
+            interpolation_model_classification_loss = torch.tensor([0])
 
             if optimizer_order == 1:
                 classification_loss.backward()
