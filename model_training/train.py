@@ -1,6 +1,6 @@
 import torch
 import transformers
-from transformers import AutoModel, AutoModelForSequenceClassification, BertForSequenceClassification, AutoTokenizer
+from transformers import AutoModel, AutoModelForSequenceClassification, AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset
 #import pandas as pd
 import argparse
@@ -70,37 +70,33 @@ parser.add_argument('--model_save_name', type=str, default="None",
 parser.add_argument('--model_save_loc', type=str, default="trained_models_outputs",
                     help='Folder in which models are saved.')
 
+parser.add_argument('--models_to_save', type=str, default="last",
+                    help='Which of the trained models to save. Options are \'last\', \'best\', or \'both\'. Defaults to \'last\'.')
 
 args = parser.parse_args()
 
-
-model = AutoModelForSequenceClassification.from_pretrained(args.model_name).to(args.device)
 dataset_label = str.lower(args.dataset)
+
+training_generator = False
+if dataset_label in ['open_assistant']:
+    training_generator = True
+    model = AutoModelForCausalLM.from_pretrained(args.model_name).to(args.device)
+else:
+    model = AutoModelForSequenceClassification.from_pretrained(args.model_name).to(args.device)
+
 data_path = "data/" + dataset_label
 make_binary = str.lower(args.make_binary) == "true"
 
-if dataset_label == "mnli":
-    if str(args.load_saved_data) == "true":
-        train_data, train_labels, test_data, test_labels = load_data_from_file(data_path, "mnli")
-    else:
-        train_data, train_labels, test_data, test_labels = get_mnli_dataset(model_name = args.model_name, 
-                                                                            longest_sequence_allowed = args.longest_sequence_allowed, 
-                                                                            n_test_data = args.test_set_size, 
-                                                                            make_binary = make_binary, 
-                                                                            data_path = data_path, 
-                                                                            device = args.device, 
-                                                                            save_data = True)
-elif dataset_label == "anli":
-    if str(args.load_saved_data) == "true":
-        train_data, train_labels, test_data, test_labels = load_data_from_file(data_path, "anli")
-    else:
-        train_data, train_labels, test_data, test_labels = get_anli_dataset(model_name = args.model_name, 
-                                                                            longest_sequence_allowed = args.longest_sequence_allowed, 
-                                                                            n_test_data = args.test_set_size, 
-                                                                            make_binary = make_binary, 
-                                                                            data_path = data_path, 
-                                                                            device = args.device, 
-                                                                            save_data = True)
+
+train_data, train_labels, test_data, test_labels, tokenizer = load_data(args.model_name,
+                                                                        dataset_label,
+                                                                        args.load_saved_data,
+                                                                        data_path,
+                                                                        args.longest_sequence_allowed,
+                                                                        args.test_set_size,
+                                                                        make_binary,
+                                                                        args.device)
+
 
 old_model_names = [name for name in os.listdir("../" + args.existing_models_path) if name[0] != '.']
 existing_models = [torch.load("../" + args.existing_models_path + "/" + old_model_name) for old_model_name in old_model_names]
@@ -113,6 +109,7 @@ model, best_model, best_model_test_loss, train_losses, train_accuracies, test_lo
                                                                                      train_labels,
                                                                                      test_data,
                                                                                      test_labels,
+                                                                                     training_generator = training_generator,
                                                                                      existing_models = existing_models,
                                                                                      optimizer = args.optimizer,
                                                                                      lr = args.lr,
@@ -123,8 +120,14 @@ model, best_model, best_model_test_loss, train_losses, train_accuracies, test_lo
                                                                                      warmup_frac = args.warmup_frac,
                                                                                      max_interpolation_model_loss = args.max_interpolation_model_loss,
                                                                                      basin_exploration_loss_weight = args.basin_exploration_loss_weight,
-                                                                                     device = args.device)
+                                                                                     device = args.device,
+                                                                                     pad_token_id = tokenizer.pad_token_id)
+models_to_save = str.lower(args.models_to_save)
+
 if args.model_save_name != "None":
-    torch.save(model, "../" + args.model_save_loc + "/" + args.model_save_name + ".pth")
+    if models_to_save in ['last', 'both']:
+        torch.save(model, "../" + args.model_save_loc + "/" + args.model_save_name + "_last_model.pth")
+    if models_to_save in ['best', 'both']:
+        torch.save(best_model, "../" + args.model_save_loc + "/" + args.model_save_name + "_best_model.pth")
 
 print(test_accuracies)
