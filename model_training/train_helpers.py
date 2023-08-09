@@ -77,7 +77,8 @@ def train_new_model(model,
             outputs = model(batch_data, labels = batch_labels, attention_mask = attention_mask)
             classification_loss = outputs.loss
             interpolation_model_classification_loss = torch.tensor([0])
-
+            logits = outputs.logits
+            argmax_dim = len(logits.size()) - 1
             if optimizer_order == 1:
                 classification_loss.backward()
             elif optimizer_order == 2:
@@ -106,7 +107,7 @@ def train_new_model(model,
                 
                 epoch_n_basin_preds += batch_n_preds
 
-                basin_predictions = torch.argmax(prior_model_outputs.logits, dim=1)
+                basin_predictions = torch.argmax(prior_model_outputs.logits, dim=argmax_dim)
                 basin_n_correct = torch.sum(basin_predictions == batch_labels).item()
                 epoch_train_n_basin_correct += basin_n_correct
                 epoch_total_basin_reg_loss += (interpolation_model_classification_loss * batch_n_preds).item()
@@ -116,7 +117,7 @@ def train_new_model(model,
             optimizer.zero_grad()
 
             logits = outputs.logits
-            predictions = torch.argmax(logits, dim=len(logits.size()) - 1)
+            predictions = torch.argmax(logits, dim=argmax_dim)
             #print(logits.size(), batch_labels.size(), predictions.size())
 
             n_correct = torch.sum(predictions == batch_labels).item()
