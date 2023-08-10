@@ -107,6 +107,7 @@ if not args.single_prefix is None:
 elif not args.prefixes_path is None:
     if ".txt" in args.prefixes_path:
         prompt = open(args.prefixes_path, "r").readlines()
+        prompt = [p.replace("\n", "") for p in prompt]
     elif ".csv" in args.prefixes_path:
         prompt = pd.read_csv(args.prefixes_path).values[:,1].tolist()
 input_ids = tokenizer.batch_encode_plus(prompt, padding=True, truncation=True, return_tensors="pt")['input_ids'].to(args.device)
@@ -114,7 +115,12 @@ input_ids = tokenizer.batch_encode_plus(prompt, padding=True, truncation=True, r
 # neucleus sampling (sampling=True):
 # greedy search (sampling=False): 
 sampling = str.lower(args.sampling) == 'true'
-generations = model.generate(input_ids, do_sample=sampling, max_new_tokens=args.generation_length, top_k=None, top_p=args.top_p, num_return_sequences=args.generations_per_prefix)
+generations = []
+for ids in input_ids:
+    ids = ids[ids != tokenizer.pad_token_id]
+    ids = torch.unsqueeze(ids, 0)
+    generation = model.generate(ids, do_sample=sampling, max_new_tokens=args.generation_length, top_k=None, top_p=args.top_p, num_return_sequences=args.generations_per_prefix).tolist()
+    generations += generation
 generated_texts = tokenizer.batch_decode(generations)
 
 

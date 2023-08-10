@@ -41,10 +41,19 @@ class CausalLMSubtract(GPT2LMHeadModel):
         subtract_prob = subtract_prob + 1e-7
         new_logits = subtract_prob.log() # No need to normalize because this is the logit
 
-        return CausalLMOutputWithPast(
+        output = CausalLMOutputWithPast(
             loss=(model_1_output.loss, model_2_output.loss),
             logits=new_logits,
             past_key_values=None, # (model_1_output.past_key_values, model_2_output.past_key_values),
             hidden_states=(model_1_output.hidden_states, model_2_output.hidden_states),
             attentions=(model_1_output.attentions, model_2_output.attentions),
         )
+        output['model_1_logits'] = model_1_output.logits
+        output['model_2_logits'] = model_2_output.logits
+        return output
+
+
+
+def estimate_cont_divergence(clms, text, n_estimations = 1, generation_length = 20):
+    # TODO
+    pass
