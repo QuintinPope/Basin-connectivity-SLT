@@ -96,7 +96,7 @@ def get_open_assistant_dataset(model_name = "gpt2",
                           data_path,
                           data_label)
 
-    return train_convos_ids, train_convos_ids, test_convos_ids, train_convos_ids
+    return train_convos_ids, train_convos_ids, test_convos_ids, test_convos_ids
 
 
 def load_data(model_name, dataset_label, load_saved_data, data_path, longest_sequence_allowed, test_set_size, make_binary, device):
